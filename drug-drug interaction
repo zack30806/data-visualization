@@ -1,0 +1,250 @@
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(magrittr)
+library(ggraph)
+library(igraph)
+library(GGally)
+library(ggnetwork)
+library(networkD3)
+polypharmacy<-read.csv("C:/Users/zack3/polypharmacy.csv",header = TRUE)
+
+#####建立node1、node2 、NODE-NODE table#####
+node1<- data.frame(table(polypharmacy$X..STITCH.1))
+names(node1)<-c("drugID", "Freq1")
+node2<- data.frame(table(polypharmacy$STITCH.2))
+names(node2)<-c("drugID", "Freq2")
+node1<-node1%>%arrange(-Freq1)
+node2<-node2%>%arrange(-Freq2)#最多的為唑吡坦是一種Z-drugs安眠藥
+
+node<- data.frame(table(polypharmacy$X..STITCH.1,polypharmacy$STITCH.2))
+names(node)<-c("node1", "node2","Freq")
+node<-node%>%
+  arrange(-Freq)%>%
+  #group_by(node1)%>%
+  filter(Freq>300)%>%
+  select(node1,node2)
+write.csv(node, "node.csv")
+#full join
+node1and2fulljoin<-merge(x =node1, y =node2, by = "drugID", all = TRUE)
+node1and2fulljoin$Freq1[is.na(node1and2fulljoin$Freq1)]<-0
+node1and2fulljoin$Freq2[is.na(node1and2fulljoin$Freq2)]<-0
+str(node1and2fulljoin)
+totalfreq<-node1and2fulljoin$Freq1+node1and2fulljoin$Freq2
+node1and2fulljoin<-cbind(node1and2fulljoin,totalfreq)
+node1and2fulljoin<-node1and2fulljoin%>%filter(totalfreq>15000)
+
+totaldrug<-ggplot(node1and2fulljoin,
+                  aes(x = reorder(drugID, -totalfreq), y = totalfreq,fill = drugID))
+totaldrug+geom_bar(stat = "identity")+
+  ggtitle("所有藥物所產生之副作用次數")+
+  xlab("DrugID")+
+  ylab("Frequency")
+
+library(igraph)
+library(networkD3)
+topedge <- simpleNetwork(node, height="100px", width="100px",        
+                           Source = 1,                 # column number of source
+                           Target = 2,                 # column number of target
+                           linkDistance = 10,          # distance between node. Increase this value to have more space between nodes
+                           charge = -900,                # numeric value indicating either the strength of the node repulsion (negative value) or attraction (positive value)
+                           fontSize = 10,               # size of the node names
+                           fontFamily = "serif",       # font og node names
+                           linkColour = "#666",        # colour of edges, MUST be a common colour for the whole graph
+                           nodeColour = "#b36980",     # colour of nodes, MUST be a common colour for the whole graph
+                           opacity = 0.9,              # opacity of nodes. 0=transparent. 1=no transparency
+                           zoom = T                    # Can you zoom on the figure?
+)
+
+topedge
+
+
+
+
+
+#####建立SIDEEFFECT TABLE#####
+sdeffect<- data.frame(table(polypharmacy$Side.Effect.Name))
+names(sdeffect)<-c("sideeffect", "Freq")
+aa<-sdeffect %>%        #篩出次數超過3000的
+  filter(Freq>3000)%>%
+  arrange(-Freq)
+#####篩選並劃出sideeffect bar chart#####
+sd1 <-ggplot(aa,aes(x = reorder(sideeffect, -Freq), y = Freq,fill = sideeffect))
+sd1+geom_bar(stat = "identity")+
+    ggtitle("所有藥物-藥物間所產生之副作用次數")+
+    xlab("副作用")+
+    ylab("Frequency")
+# Compute percentages
+aa$fraction = aa$Freq / sum(aa$Freq)
+
+# Compute the cumulative percentages (top of each rectangle)
+aa$amax = cumsum(aa$fraction)
+
+# Compute the bottom of each rectangle
+aa$amin = c(0, head(aa$amax, n=-1))
+
+# Make the plot
+sdpie<-ggplot(aa, aes(ymax=amax, ymin=amin, xmax=4, xmin=3, fill=sideeffect)) 
+sdpie+  geom_rect() +
+  coord_polar(theta="y") + # Try to remove that to understand how the chart is built initially
+  xlim(c(2, 4)) # Try to remove that to see how to make a pie chart
+
+#####針對副作用前三高之症狀進行藥物分析#####
+AP<-polypharmacy %>% 
+  filter(Side.Effect.Name =="arterial pressure NOS decreased")%>% #選取副作用最多通常動脈壓
+  select(X..STITCH.1,STITCH.2)
+
+APnode1<-data.frame(table(AP$X..STITCH.1))
+APnode2<-data.frame(table(AP$STITCH.2))
+APnode<-data.frame(table(AP$X..STITCH.1,AP$STITCH.2))
+
+fulljoinAP<-merge(x = APnode1, y =APnode2, by = "Var1", all = TRUE)
+
+fulljoinAP$Freq.x[is.na(fulljoinAP$Freq.x)]<-0
+fulljoinAP$Freq.y[is.na(fulljoinAP$Freq.y)]<-0
+
+totalfreqAP<-fulljoinAP$Freq.x+fulljoinAP$Freq.y
+fulljoinAP<-cbind(fulljoinAP,totalfreqAP)
+fulljoinAP<-fulljoinAP%>%filter(totalfreqAP>80)
+
+AP_drugplot<-ggplot(fulljoinAP,aes(x = reorder(Var1, -totalfreqAP)
+                                        , y = totalfreqAP,fill = Var1))
+AP_drugplot+geom_bar(stat = "identity")+
+  ggtitle("產生低血壓症狀副作用之藥物次數")+
+  xlab("drugID")+
+  ylab("Frequency")
+
+library(dplyr)
+ap5<-polypharmacy %>% 
+  filter(Side.Effect.Name =="arterial pressure NOS decreased")%>%
+  filter(X..STITCH.1=="CID000004900"|STITCH.2=="CID000004900"
+         |X..STITCH.1=="CID000005732"|STITCH.2=="CID000005732"
+         |X..STITCH.1=="CID000002244"|STITCH.2=="CID000002244"
+         |X..STITCH.1=="CID000005039"|STITCH.2=="CID000005039"
+         |X..STITCH.1=="CID000002083"|STITCH.2=="CID000002083"
+  )
+ 
+ap= subset(ap5, select = c(1,2) )
+
+library(igraph)
+library(networkD3)
+apnetwork <- simpleNetwork(ap, height="100px", width="100px",        
+                   Source = 1,                 # column number of source
+                   Target = 2,                 # column number of target
+                   linkDistance = 10,          # distance between node. Increase this value to have more space between nodes
+                   charge = -900,                # numeric value indicating either the strength of the node repulsion (negative value) or attraction (positive value)
+                   fontSize = 30,               # size of the node names
+                   fontFamily = "serif",       # font og node names
+                   linkColour = "#666",        # colour of edges, MUST be a common colour for the whole graph
+                   nodeColour = "#b36980",     # colour of nodes, MUST be a common colour for the whole graph
+                   opacity = 0.9,              # opacity of nodes. 0=transparent. 1=no transparency
+                   zoom = T                    # Can you zoom on the figure?
+)
+
+apnetwork
+-----------------------------------------------------------------------------------------------
+an<-polypharmacy %>% 
+  filter(Side.Effect.Name =="anaemia")%>% #選取副作用次多噁心
+  select(X..STITCH.1,STITCH.2)
+
+annode1<-data.frame(table(an$X..STITCH.1))
+annode2<-data.frame(table(an$STITCH.2))
+annode<-data.frame(table(an$X..STITCH.1,an$STITCH.2))
+fulljoinan<-merge(x = annode1, y =annode2, by = "Var1", all = TRUE)
+
+fulljoinan$Freq.x[is.na(fulljoinan$Freq.x)]<-0
+fulljoinan$Freq.y[is.na(fulljoinan$Freq.y)]<-0
+
+totalfreqan<-fulljoinan$Freq.x+fulljoinan$Freq.y
+fulljoinan<-cbind(fulljoinan,totalfreqan)
+fulljoinan<-fulljoinan%>%filter(totalfreqan>80)
+anaemia_drugplot<-ggplot(fulljoinan,aes(x = reorder(Var1, -totalfreqan)
+                                        , y = totalfreqan,fill = Var1))
+anaemia_drugplot+geom_bar(stat = "identity")+
+  ggtitle("產生貧血症狀副作用之藥物次數")+
+  xlab("drugID")+
+  ylab("Frequency")
+
+library(dplyr)
+an5<-polypharmacy %>% 
+  filter(Side.Effect.Name =="anaemia")%>%
+  filter(X..STITCH.1=="CID000002662"|STITCH.2=="CID000002662"
+         |X..STITCH.1=="CID000003440"|STITCH.2=="CID000003440"
+         |X..STITCH.1=="CID000003958"|STITCH.2=="CID000003958"
+         |X..STITCH.1=="CID000004900"|STITCH.2=="CID000004900"
+         |X..STITCH.1=="CID000005732"|STITCH.2=="CID000005732"
+         )%>% #選取副作用次多噁心
+  select(X..STITCH.1,STITCH.2)
+an= subset(an5, select = c(1,2) )
+
+library(igraph)
+library(networkD3)
+annetwork <- simpleNetwork(an, height="100px", width="100px",        
+                   Source = 1,                 # column number of source
+                   Target = 2,                 # column number of target
+                   linkDistance = 10,          # distance between node. Increase this value to have more space between nodes
+                   charge = -900,                # numeric value indicating either the strength of the node repulsion (negative value) or attraction (positive value)
+                   fontSize = 30,               # size of the node names
+                   fontFamily = "serif",       # font og node names
+                   linkColour = "#666",        # colour of edges, MUST be a common colour for the whole graph
+                   nodeColour = "#69b3a2",     # colour of nodes, MUST be a common colour for the whole graph
+                   opacity = 0.9,              # opacity of nodes. 0=transparent. 1=no transparency
+                   zoom = T                    # Can you zoom on the figure?
+)
+
+annetwork
+
+library(dplyr)
+db<-polypharmacy %>% 
+  filter(Side.Effect.Name =="Difficulty breathing")%>% #選取副作用次多呼吸困難
+  select(X..STITCH.1,STITCH.2)
+
+db1<-data.frame(table(db$X..STITCH.1))
+db2<-data.frame(table(db$STITCH.2))
+
+fulljoindb<-merge(x = db1, y =db2, by = "Var1", all = TRUE)
+
+fulljoindb$Freq.x[is.na(fulljoindb$Freq.x)]<-0
+fulljoindb$Freq.y[is.na(fulljoindb$Freq.y)]<-0
+totalfreqdb<-fulljoindb$Freq.x+fulljoindb$Freq.y
+fulljoindb<-cbind(fulljoindb,totalfreqdb)
+
+fulljoindb<-fulljoindb%>%filter(totalfreqdb>=78)
+db_drugplot<-ggplot(fulljoindb,aes(x = reorder(Var1, -totalfreqdb)
+                                        , y = totalfreqdb,fill = Var1))
+db_drugplot+geom_bar(stat = "identity")+
+  ggtitle("產生呼吸困難症狀副作用之藥物次數")+
+  xlab("drugID")+
+  ylab("Frequency")
+--------------------------------------------------------------------------------
+library(dplyr)
+db5<-polypharmacy %>% 
+  filter(Side.Effect.Name =="Difficulty breathing")%>%
+  filter(X..STITCH.1=="CID000004900"|STITCH.2=="CID000004900"
+         |X..STITCH.1=="CID000005732"|STITCH.2=="CID000005732"
+         |X..STITCH.1=="CID000006691"|STITCH.2=="CID000006691"
+         |X..STITCH.1=="CID000003440"|STITCH.2=="CID000003440"
+         |X..STITCH.1=="CID000002244"|STITCH.2=="CID000002244"
+  )%>%  
+  select(X..STITCH.1,STITCH.2)
+db= subset(db5, select = c(2,3) )
+
+
+library(igraph)
+library(networkD3)
+dbnetwork <- simpleNetwork(db, height="100px", width="100px",        
+                           Source = 1,                 # column number of source
+                           Target = 2,                 # column number of target
+                           linkDistance = 10,          # distance between node. Increase this value to have more space between nodes
+                           charge = -900,                # numeric value indicating either the strength of the node repulsion (negative value) or attraction (positive value)
+                           fontSize = 30,               # size of the node names
+                           fontFamily = "serif",       # font og node names
+                           linkColour = "#666",        # colour of edges, MUST be a common colour for the whole graph
+                           nodeColour = "#b3b169",     # colour of nodes, MUST be a common colour for the whole graph
+                           opacity = 0.9,              # opacity of nodes. 0=transparent. 1=no transparency
+                           zoom = T                    # Can you zoom on the figure?
+)
+
+dbnetwork
+
+
