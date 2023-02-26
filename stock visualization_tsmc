@@ -1,0 +1,68 @@
+
+import twstock
+import csv
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+import time
+file='stock2330.csv'
+if  os.path.isfile(file):
+        title=['date','成交股數','成交金額','開盤價',"收盤價","成交筆數","最高價","最低價"]
+        outputfile=open(file,'a',newline='',encoding='big5')
+        outputwriter=csv.writer(outputfile)
+        for i in range(1,12):
+            stock=twstock.Stock('2330')
+            stocklist=stock.fetch(2021,i)
+            data=[]
+            for stock in stocklist:
+                strdate=stock.date.strftime('%Y-%m-%d')
+                li=[strdate,stock.capacity,stock.turnover,stock.open,stock.close,stock.transaction,stock.high,stock.low]
+                data.append(li)
+            if i==1:
+               outputwriter.writerow(title)
+            for s in (data):
+                outputwriter.writerow(s)
+            time.sleep(2)
+            outputfile.close() 
+                
+  
+A=pd.read_csv('D:/111-NTU_PYTHON/stock2330.csv',encoding='big5')  
+A['date']=pd.to_datetime(A['date'])
+A.plot(kind='line',figsize=(12,6),x='date',y=["最高價","最低價"],linewidth=5,title="2021-TSMC stock price", label=['highest price', 'lowest price'])
+A.plot(kind='line',figsize=(12,6),x='date',y=["開盤價","收盤價"],linewidth=3,title="2021-TSMC stock price", label=['Opening Price', 'Closing Price'],marker='x')
+A.plot(kind='bar',figsize=(15,5),x='date',y=['成交股數'],label=['stock capacity'],title="2021-TSMC stock capacity")
+
+
+#簡單回歸 Y=aX+b
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import sklearn
+import seaborn as sns
+from sklearn.model_selection  import train_test_split
+from sklearn import datasets,linear_model
+
+plt.style.use('ggplot')
+plt.rcParams['font.family']='SimHei' #⿊體
+
+A=pd.read_csv("D:/111-NTU_PYTHON/stock2330.csv",encoding="big5")
+#切分訓練 測試資料
+x=A[["最高價"]]
+y=A[["收盤價"]]
+x_train,x_test,y_train,y_test=train_test_split(x,y,test_size=0.3,random_state=10) #30%測試資料 70%訓練資料 設定種子值
+x_test
+#linear regression物件
+
+regr=linear_model.LinearRegression()
+
+#訓練模型 用fit
+regr.fit(x_train,y_train)   
+r_squared = regr.score(x_train, y_train)
+print('y=ax+b的 a係數:',regr.coef_)
+print('y=ax+b的 b截距:',regr.intercept_ )
+print('R平方',r_squared)
+plt.scatter(x_test,y_test,color='red',marker='x')  #marker='x' 只是圖中點的形狀
+plt.plot(x_test,regr.predict(x_test),color='green',marker='.')
+plt.xlabel("highest price")
+plt.ylabel('Closing Price')
+plt.show()
